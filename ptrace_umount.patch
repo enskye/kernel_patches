@@ -1,0 +1,42 @@
+From 0df9b96dcb3836e6e85f83839a95af71d7130e84 Mon Sep 17 00:00:00 2001
+From: backslashxx <118538522+backslashxx@users.noreply.github.com>
+Date: Wed, 28 May 2025 16:28:50 +0800
+Subject: [PATCH] KernelSU: core_hook: block apps on umount list from attaching
+ ptrace
+
+---
+ drivers/kernelsu/core_hook.c | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
+
+diff --git a/drivers/kernelsu/core_hook.c b/drivers/kernelsu/core_hook.c
+index efddc12ec208..2ac388fbf5b9 100644
+--- a/drivers/kernelsu/core_hook.c
++++ b/drivers/kernelsu/core_hook.c
+@@ -946,6 +946,19 @@ LSM_HANDLER_TYPE ksu_key_permission(key_ref_t key_ref, const struct cred *cred,
+ }
+ #endif
+ 
++static int ksu_ptrace_perm(struct task_struct *child, unsigned int mode)
++{
++	uid_t uid = __kuid_val(child->cred->uid);
++
++	if (ksu_uid_should_umount(uid)) {
++		pr_info("%s: found tracing! current uid=%d, child uid=%d\n", __func__,
++			__kuid_val(current->cred->uid), __kuid_val(child->cred->uid));
++		// do something!
++		return -ENOSYS;
++	}
++	return 0;
++}
++
+ #ifdef CONFIG_KSU_LSM_SECURITY_HOOKS
+ static int ksu_task_prctl(int option, unsigned long arg2, unsigned long arg3,
+ 			  unsigned long arg4, unsigned long arg5)
+@@ -971,6 +984,7 @@ static struct security_hook_list ksu_hooks[] = {
+ 	LSM_HOOK_INIT(inode_rename, ksu_inode_rename),
+ 	LSM_HOOK_INIT(task_fix_setuid, ksu_task_fix_setuid),
+ 	LSM_HOOK_INIT(sb_mount, ksu_sb_mount),
++	LSM_HOOK_INIT(ptrace_access_check, ksu_ptrace_perm),
+ #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0) || defined(CONFIG_KSU_ALLOWLIST_WORKAROUND)
+ 	LSM_HOOK_INIT(key_permission, ksu_key_permission)
+ #endif
