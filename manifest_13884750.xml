@@ -5,9 +5,9 @@
 
   <default revision="main-kernel-build-2023" remote="aosp" sync-j="4" />
 
-  <superproject name="kernel/superproject" remote="aosp" revision="common-android14-6.1-2025-05" />
+  <superproject name="kernel/superproject" remote="aosp" revision="common-android14-6.1-2025-08" />
 
-  <project path="build/kernel" name="kernel/build" revision="5c398764a918e5d18510fe9036d79d67578f02cf">
+  <project path="build/kernel" name="kernel/build" revision="19a5d59e812ce023f5c26aa4d6080e99ade17ffd">
     <linkfile dest="tools/bazel" src="kleaf/bazel.sh" />
 
     <linkfile dest="WORKSPACE" src="kleaf/bazel.WORKSPACE" />
@@ -17,7 +17,7 @@
     <linkfile dest="build/config.sh" src="config.sh" />
 </project>
 
-  <project path="common" name="kernel/common" revision="a4b2a2c52a049607db8348e4270278d4344c8c27" upstream="android14-6.1-2025-05" dest-branch="android14-6.1-2025-05" />
+  <project path="common" name="kernel/common" revision="1b8fdcb00333c4c2355e4b5c55d9020c554eecca" upstream="android14-6.1-2025-08" dest-branch="android14-6.1-2025-08" />
 
   <project path="kernel/configs" name="kernel/configs" revision="bd79f38685cf939ab836dd8ddd2e01506ccff47a" upstream="main" dest-branch="main" />
 
@@ -27,13 +27,13 @@
     <linkfile dest="launch_cvd.sh" src="tools/launch_cvd.sh" />
 </project>
 
-  <project path="common-modules/virtual-device" name="kernel/common-modules/virtual-device" revision="3bf1d392fbe2b348fa87d0693238635ac01a03d8" upstream="android14-6.1" dest-branch="android14-6.1" />
+  <project path="common-modules/virtual-device" name="kernel/common-modules/virtual-device" revision="f2eb8e837a6d6a70b65d6916829f57b5c98e99f9" upstream="android14-6.1" dest-branch="android14-6.1" />
 
   <project path="prebuilts/clang/host/linux-x86" name="platform/prebuilts/clang/host/linux-x86" clone-depth="1" revision="7775eb113f960bc69a780b621d03a715914d4bca" />
 
   <project path="prebuilts/gcc/linux-x86/host/x86_64-linux-glibc2.17-4.8" name="platform/prebuilts/gcc/linux-x86/host/x86_64-linux-glibc2.17-4.8" clone-depth="1" revision="f6d40532273c8bd628b960ecc0970c7294c8d891" />
 
-  <project path="prebuilts/build-tools" name="platform/prebuilts/build-tools" clone-depth="1" revision="c181f690fe9b76142b3203c2ab959b6299d4d1fd" />
+  <project path="prebuilts/build-tools" name="platform/prebuilts/build-tools" clone-depth="1" revision="4649614b4030ad825f2e94401d04526651f44e88" />
 
   <project path="prebuilts/clang-tools" name="platform/prebuilts/clang-tools" clone-depth="1" revision="f08a96e4015aed7c0341b880ccd85500b1b44a26" />
 
