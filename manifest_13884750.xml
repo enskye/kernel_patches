@@ -5,7 +5,7 @@
 
   <default revision="main-kernel-build-2023" remote="aosp" sync-j="4" />
 
-  <superproject name="kernel/superproject" remote="aosp" revision="common-android14-6.1-2025-06" />
+  <superproject name="kernel/superproject" remote="aosp" revision="common-android14-6.1-2025-05" />
 
   <project path="build/kernel" name="kernel/build" revision="5c398764a918e5d18510fe9036d79d67578f02cf">
     <linkfile dest="tools/bazel" src="kleaf/bazel.sh" />
@@ -17,7 +17,7 @@
     <linkfile dest="build/config.sh" src="config.sh" />
 </project>
 
-  <project path="common" name="kernel/common" revision="098619d7de5518919c2cb3dec6cc832967029b04" upstream="android14-6.1-2025-06" dest-branch="android14-6.1-2025-06" />
+  <project path="common" name="kernel/common" revision="a4b2a2c52a049607db8348e4270278d4344c8c27" upstream="android14-6.1-2025-05" dest-branch="android14-6.1-2025-05" />
 
   <project path="kernel/configs" name="kernel/configs" revision="bd79f38685cf939ab836dd8ddd2e01506ccff47a" upstream="main" dest-branch="main" />
 
@@ -27,7 +27,7 @@
     <linkfile dest="launch_cvd.sh" src="tools/launch_cvd.sh" />
 </project>
 
-  <project path="common-modules/virtual-device" name="kernel/common-modules/virtual-device" revision="f2eb8e837a6d6a70b65d6916829f57b5c98e99f9" upstream="android14-6.1" dest-branch="android14-6.1" />
+  <project path="common-modules/virtual-device" name="kernel/common-modules/virtual-device" revision="3bf1d392fbe2b348fa87d0693238635ac01a03d8" upstream="android14-6.1" dest-branch="android14-6.1" />
 
   <project path="prebuilts/clang/host/linux-x86" name="platform/prebuilts/clang/host/linux-x86" clone-depth="1" revision="7775eb113f960bc69a780b621d03a715914d4bca" />
 
