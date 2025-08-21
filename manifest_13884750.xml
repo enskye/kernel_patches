@@ -17,7 +17,7 @@
     <linkfile dest="build/config.sh" src="config.sh" />
 </project>
 
-  <project path="common" name="kernel/common" revision="9e1897ac08f6c271c76255724bc2caca4a12f67c" upstream="android14-6.1-2025-06" dest-branch="android14-6.1-2025-06" />
+  <project path="common" name="kernel/common" revision="109284bd58d43e846b05d482ecdf50c974562c5f" upstream="android14-6.1-2025-06" dest-branch="android14-6.1-2025-06" />
 
   <project path="kernel/configs" name="kernel/configs" revision="bd79f38685cf939ab836dd8ddd2e01506ccff47a" upstream="main" dest-branch="main" />
 
