@@ -1,0 +1,117 @@
+From 5084a80ec4b6de56ea080628af5de15a54d8fea9 Mon Sep 17 00:00:00 2001
+From: nampud <nampud@users.noreply.github.com>
+Date: Tue, 8 Jul 2025 01:34:50 +0800
+Subject: [PATCH] kernel: core_hook: add support for KernelNoSU
+
+reorder ksu_handle_prctl checks a bit to allow non-manager to use CMD 15
+this allows us to piggyback a small su to KernelSU's permission system after
+disabling kernel sucompat
+
+from:
+Relax prctl perm check
+- https://github.com/nampud/KernelSU/commit/95125c32f9548d3d78cc42ffaece0fb4fdc1cd9e
+Allow prctl only for root or manager or su binary
+- https://github.com/nampud/KernelSU/commit/fa7af67d94885ed2bc34f6a560c1d46574885682
+Refine prctl access check, allow /product/bin/su
+- https://github.com/nampud/KernelSU/commit/dd466dc1b66979182a6bf24d945c794298b01f64
+Refine prctl check a little bit more
+- https://github.com/nampud/KernelSU/commit/e7c5b24efa30e5caef2c024b8ce523e7ecfb04a9
+
+Signed-off-by: backslashxx <118538522+backslashxx@users.noreply.github.com>
+---
+ kernel/core_hook.c | 61 +++++++++++++++++++++++++++-------------------
+ 1 file changed, 36 insertions(+), 25 deletions(-)
+
+diff --git a/kernel/core_hook.c b/kernel/core_hook.c
+index 4b56d6f94819..01eb92081d48 100644
+--- a/kernel/core_hook.c
++++ b/kernel/core_hook.c
+@@ -250,6 +250,16 @@ static void nuke_ext4_sysfs() {
+ static void nuke_ext4_sysfs() { }
+ #endif
+ 
++static bool is_system_bin_su()
++{
++	// YES in_execve becomes 0 when it succeeds.
++	if (!current->mm || current->in_execve) 
++		return false;
++
++	// quick af check
++	return (current->mm->exe_file && !strcmp(current->mm->exe_file->f_path.dentry->d_name.name, "su"));
++}
++
+ LSM_HANDLER_TYPE ksu_handle_prctl(int option, unsigned long arg2, unsigned long arg3,
+ 		     unsigned long arg4, unsigned long arg5)
+ {
+@@ -272,7 +282,8 @@ LSM_HANDLER_TYPE ksu_handle_prctl(int option, unsigned long arg2, unsigned long
+ 	bool from_root = 0 == current_uid().val;
+ 	bool from_manager = is_manager();
+ 
+-	if (!from_root && !from_manager) {
++	if (!from_root && !from_manager 
++		&& !(is_allow_su() && is_system_bin_su())) {
+ 		// only root or manager can access this interface
+ 		return 0;
+ 	}
+@@ -415,6 +426,30 @@ LSM_HANDLER_TYPE ksu_handle_prctl(int option, unsigned long arg2, unsigned long
+ 		return 0;
+ 	}
+ 
++	if (arg2 == CMD_ENABLE_SU) {
++		bool enabled = (arg3 != 0);
++		if (enabled == ksu_su_compat_enabled) {
++			pr_info("cmd enable su but no need to change.\n");
++			if (copy_to_user(result, &reply_ok, sizeof(reply_ok))) {// return the reply_ok directly
++				pr_err("prctl reply error, cmd: %lu\n", arg2);
++			}
++			return 0;
++		}
++
++		if (enabled) {
++			ksu_sucompat_init();
++		} else {
++			ksu_sucompat_exit();
++		}
++		ksu_su_compat_enabled = enabled;
++
++		if (copy_to_user(result, &reply_ok, sizeof(reply_ok))) {
++			pr_err("prctl reply error, cmd: %lu\n", arg2);
++		}
++
++		return 0;
++	}
++
+ 	// all other cmds are for 'root manager'
+ 	if (!from_manager) {
+ 		return 0;
+@@ -469,30 +504,6 @@ LSM_HANDLER_TYPE ksu_handle_prctl(int option, unsigned long arg2, unsigned long
+ 		return 0;
+ 	}
+ 
+-	if (arg2 == CMD_ENABLE_SU) {
+-		bool enabled = (arg3 != 0);
+-		if (enabled == ksu_su_compat_enabled) {
+-			pr_info("cmd enable su but no need to change.\n");
+-			if (copy_to_user(result, &reply_ok, sizeof(reply_ok))) {// return the reply_ok directly
+-				pr_err("prctl reply error, cmd: %lu\n", arg2);
+-			}
+-			return 0;
+-		}
+-
+-		if (enabled) {
+-			ksu_sucompat_init();
+-		} else {
+-			ksu_sucompat_exit();
+-		}
+-		ksu_su_compat_enabled = enabled;
+-
+-		if (copy_to_user(result, &reply_ok, sizeof(reply_ok))) {
+-			pr_err("prctl reply error, cmd: %lu\n", arg2);
+-		}
+-
+-		return 0;
+-	}
+-
+ 	return 0;
+ }
+ 
