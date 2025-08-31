@@ -37,7 +37,7 @@ index 1234567..abcdefg 100644
 +		bool enabled = (arg3 != 0);
 +		if (enabled == ksu_su_compat_enabled) {
 +			pr_info("cmd enable su but no need to change.\n");
-+			if (copy_to_user(result, &reply_ok, sizeof(reply_ok))) {
++			if (copy_to_user(result, &reply_ok, sizeof(reply_ok))) {// return the reply_ok directly
 +				pr_err("prctl reply error, cmd: %lu\n", arg2);
 +			}
 +			return 0;
@@ -84,9 +84,6 @@ index 1234567..abcdefg 100644
 -		if (copy_to_user(result, &reply_ok, sizeof(reply_ok))) {
 -			pr_err("prctl reply error, cmd: %lu\n", arg2);
 -		}
--
--		return 0;
--	}
 -
  	return 0;
  }
