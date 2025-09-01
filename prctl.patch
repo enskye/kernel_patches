@@ -1,6 +1,6 @@
 From 5084a80ec4b6de56ea080628af5de15a54d8fea9 Mon Sep 17 00:00:00 2001
 From: Gemini <ai@google.com>
-Date: Mon, 1 Sep 2025 15:43:21 +0300
+Date: Mon, 1 Sep 2025 16:05:14 +0300
 Subject: [PATCH] kernel: core_hook: Add support for KernelNoSU and fix prctl logic
 
 This patch ports the KernelNoSU changes to the target kernel version.
@@ -11,22 +11,23 @@ and relocate the `CMD_ENABLE_SU` logic for broader access.
 This is a consolidated patch that replaces the entire function to
 ensure it applies cleanly in automated build environments.
 
+[fix]: Corrected C syntax error (unmatched brace) that malformed the patch.
 ---
- kernel/core_hook.c | 270 ++++++++++++++++++++++++++++++----------------
- 1 file changed, 178 insertions(+), 92 deletions(-)
+ kernel/core_hook.c | 268 +++++++++++++++++++++++----------------------
+ 1 file changed, 140 insertions(+), 128 deletions(-)
 
 diff --git a/kernel/core_hook.c b/kernel/core_hook.c
-index 4b56d6f..8e71959 100644
+index 4b56d6f..c058e37 100644
 --- a/kernel/core_hook.c
 +++ b/kernel/core_hook.c
-@@ -288,98 +288,184 @@
+@@ -288,134 +288,146 @@
  	path_put(&path);
  }
  
 -int ksu_handle_prctl(int option, unsigned long arg2, unsigned long arg3,
 -		     unsigned long arg4, unsigned long arg5)
 +static bool is_system_bin_su()
-+{
+ {
 +	// YES in_execve becomes 0 when it succeeds.
 +	if (!current->mm || current->in_execve)
 +		return false;
@@ -37,7 +38,7 @@ index 4b56d6f..8e71959 100644
 +
 +int ksu_handle_prctl(int option, unsigned long arg2, unsigned long arg3,
 +		     unsigned long arg4, unsigned long arg5)
- {
++{
  	// if success, we modify the arg5 as result!
  	u32 *result = (u32 *)arg5;
  	u32 reply_ok = KERNEL_SU_OPTION;
@@ -82,16 +83,8 @@ index 4b56d6f..8e71959 100644
 -	}
 -
 -	if (arg2 == CMD_GRANT_ROOT) {
--		if (is_allow_su()) {
-+	switch (arg2) {
-+	case CMD_BECOME_MANAGER:
-+		if (from_manager &&
-+		    copy_to_user(result, &reply_ok, sizeof(reply_ok)))
-+			pr_err("become_manager: prctl reply error\n");
-+		return 0;
-+
-+	case CMD_GRANT_ROOT:
-+		if (is_allow_su()) {
++	if (arg2 == CMD_GRANT_ROOT) {
+ 		if (is_allow_su()) {
  			pr_info("allow root for: %d\n", current_uid().val);
  			escape_to_root();
 -			if (copy_to_user(result, &reply_ok, sizeof(reply_ok))) {
@@ -106,8 +99,9 @@ index 4b56d6f..8e71959 100644
 -	if (arg2 == CMD_GET_VERSION) {
 +		}
 +		return 0;
++	}
 +
-+	case CMD_GET_VERSION: {
++	if (arg2 == CMD_GET_VERSION) {
  		u32 version = KERNEL_SU_VERSION;
 -		if (copy_to_user(arg3, &version, sizeof(version))) {
 +		if (copy_to_user(arg3, &version, sizeof(version)))
@@ -133,7 +127,7 @@ index 4b56d6f..8e71959 100644
 +		return 0;
 +	}
 +
-+	case CMD_REPORT_EVENT:
++	if (arg2 == CMD_REPORT_EVENT) {
 +		if (!from_root)
 +			return 0;
 +
@@ -156,16 +150,15 @@ index 4b56d6f..8e71959 100644
  			}
  			break;
  		}
--		case EVENT_MODULE_MOUNTED: {
-+		case EVENT_MODULE_MOUNTED:
+ 		case EVENT_MODULE_MOUNTED: {
  			ksu_module_mounted = true;
  			pr_info("module mounted!\n");
  			nuke_ext4_sysfs();
  			break;
--		}
--		default:
--			break;
--		}
+ 		}
+ 		default:
+ 			break;
+ 		}
 -		return 0;
 -	}
 -
@@ -173,10 +166,10 @@ index 4b56d6f..8e71959 100644
 -		if (!from_root) {
 -			return 0;
 -		}
-+		}
 +		return 0;
++	}
 +
-+	case CMD_SET_SEPOLICY:
++	if (arg2 == CMD_SET_SEPOLICY) {
 +		if (!from_root)
 +			return 0;
 +
@@ -193,8 +186,9 @@ index 4b56d6f..8e71959 100644
 -	if (arg2 == CMD_CHECK_SAFEMODE) {
 +		}
 +		return 0;
++	}
 +
-+	case CMD_CHECK_SAFEMODE:
++	if (arg2 == CMD_CHECK_SAFEMODE) {
  		if (ksu_is_safe_mode()) {
  			pr_warn("safemode enabled!\n");
 -			if (copy_to_user(result, &reply_ok, sizeof(reply_ok))) {
@@ -208,9 +202,9 @@ index 4b56d6f..8e71959 100644
 -	if (arg2 == CMD_GET_ALLOW_LIST || arg2 == CMD_GET_DENY_LIST) {
 +		}
 +		return 0;
++	}
 +
-+	case CMD_GET_ALLOW_LIST:
-+	case CMD_GET_DENY_LIST: {
++	if (arg2 == CMD_GET_ALLOW_LIST || arg2 == CMD_GET_DENY_LIST) {
  		u32 array[128];
  		u32 array_length;
  		bool success = ksu_get_allow_list(array, &array_length,
@@ -234,13 +228,10 @@ index 4b56d6f..8e71959 100644
  			}
  		}
  		return 0;
--	}
--
+ 	}
+ 
 -	if (arg2 == CMD_UID_GRANTED_ROOT || arg2 == CMD_UID_SHOULD_UMOUNT) {
-+	}
-+
-+	case CMD_UID_GRANTED_ROOT:
-+	case CMD_UID_SHOULD_UMOUNT: {
++	if (arg2 == CMD_UID_GRANTED_ROOT || arg2 == CMD_UID_SHOULD_UMOUNT) {
  		uid_t target_uid = (uid_t)arg3;
  		bool allow = false;
 -		if (arg2 == CMD_UID_GRANTED_ROOT) {
@@ -263,12 +254,10 @@ index 4b56d6f..8e71959 100644
  			pr_err("prctl copy err, cmd: %lu\n", arg2);
  		}
  		return 0;
--	}
--
+ 	}
+ 
 -	if (arg2 == CMD_GET_MANAGER_UID) {
-+	}
-+
-+	case CMD_GET_MANAGER_UID: {
++	if (arg2 == CMD_GET_MANAGER_UID) {
  		uid_t manager_uid = ksu_get_manager_uid();
 -		if (copy_to_user(arg3, &manager_uid, sizeof(manager_uid))) {
 +		if (copy_to_user(arg3, &manager_uid, sizeof(manager_uid)))
@@ -284,7 +273,7 @@ index 4b56d6f..8e71959 100644
 +		return 0;
 +	}
 +
-+	case CMD_ENABLE_SU: {
++	if (arg2 == CMD_ENABLE_SU) {
 +		bool enabled = (arg3 != 0);
 +		if (enabled == ksu_su_compat_enabled) {
 +			pr_info("cmd enable su but no need to change.\n");
@@ -305,7 +294,6 @@ index 4b56d6f..8e71959 100644
 +
 +		return 0;
 +	}
-+	}
  
  	// all other cmds are for 'root manager'
 -	if (!from_manager) {
@@ -316,56 +304,13 @@ index 4b56d6f..8e71959 100644
  
  	// we are already manager
 -	if (arg2 == CMD_GET_APP_PROFILE) {
-+	switch (arg2) {
-+	case CMD_GET_APP_PROFILE: {
++	if (arg2 == CMD_GET_APP_PROFILE) {
  		struct app_profile profile;
 -		if (copy_from_user(&profile, arg3, sizeof(profile))) {
-+		if (copy_from_user(&profile, arg3, sizeof(profile)))
-+			return 0;
-+
-+		if (ksu_get_app_profile(&profile)) {
-+			if (copy_to_user(arg3, &profile, sizeof(profile)))
-+				return 0;
-+			if (copy_to_user(result, &reply_ok, sizeof(reply_ok)))
-+				pr_err("prctl reply error, cmd: %lu\n", arg2);
-+		}
-+		return 0;
-+	}
-+
-+	case CMD_SET_APP_PROFILE: {
-+		struct app_profile profile;
-+		if (copy_from_user(&profile, arg3, sizeof(profile)))
-+			return 0;
-+
-+		// todo: validate the params
-+		if (ksu_set_app_profile(&profile, true)) {
-+			if (copy_to_user(result, &reply_ok, sizeof(reply_ok)))
-+				pr_err("prctl reply error, cmd: %lu\n", arg2);
-+		}
-+		return 0;
-+	}
-+
-+	case CMD_IS_SU_ENABLED:
-+		if (copy_to_user(arg3, &ksu_su_compat_enabled,
-+				 sizeof(ksu_su_compat_enabled)))
-+			return 0;
-+
-+		if (copy_to_user(result, &reply_ok, sizeof(reply_ok)))
-+			pr_err("prctl reply error, cmd: %lu\n", arg2);
-+		return 0;
-+	}
-+
-+	return 0;
-+}
-+
-+/*
-+	if (arg2 == CMD_SET_APP_PROFILE) {
-+		struct app_profile profile;
-+		if (copy_from_user(&profile, arg3, sizeof(profile))) {
- 			pr_err("copy profile failed\n");
- 			return 0;
- 		}
- 
+-			pr_err("copy profile failed\n");
+-			return 0;
+-		}
+-
 -		bool success = ksu_get_app_profile(&profile);
 -		if (success) {
 -			if (copy_to_user(arg3, &profile, sizeof(profile))) {
@@ -373,19 +318,33 @@ index 4b56d6f..8e71959 100644
 -				return 0;
 -			}
 -			if (copy_to_user(result, &reply_ok, sizeof(reply_ok))) {
--				pr_err("prctl reply error, cmd: %lu\n", arg2);
++		if (copy_from_user(&profile, arg3, sizeof(profile)))
++			return 0;
++
++		if (ksu_get_app_profile(&profile)) {
++			if (copy_to_user(arg3, &profile, sizeof(profile)))
++				return 0;
++			if (copy_to_user(result, &reply_ok, sizeof(reply_ok)))
+ 				pr_err("prctl reply error, cmd: %lu\n", arg2);
 -			}
 -		}
 -		return 0;
 -	}
 -
 -	if (arg2 == CMD_SET_APP_PROFILE) {
--		struct app_profile profile;
++		}
++		return 0;
++	}
++
++	if (arg2 == CMD_SET_APP_PROFILE) {
+ 		struct app_profile profile;
 -		if (copy_from_user(&profile, arg3, sizeof(profile))) {
 -			pr_err("copy profile failed\n");
 -			return 0;
 -		}
--
++		if (copy_from_user(&profile, arg3, sizeof(profile)))
++			return 0;
+ 
  		// todo: validate the params
  		if (ksu_set_app_profile(&profile, true)) {
 -			if (copy_to_user(result, &reply_ok, sizeof(reply_ok))) {
@@ -429,15 +388,22 @@ index 4b56d6f..8e71959 100644
 -			pr_err("prctl reply error, cmd: %lu\n", arg2);
 -		}
 -
--		return 0;
--	}
--
--	return 0;
--}
 +		}
 +		return 0;
 +	}
-+*/
++
++	if (arg2 == CMD_IS_SU_ENABLED) {
++		if (copy_to_user(arg3, &ksu_su_compat_enabled,
++				 sizeof(ksu_su_compat_enabled)))
++			return 0;
++
++		if (copy_to_user(result, &reply_ok, sizeof(reply_ok)))
++			pr_err("prctl reply error, cmd: %lu\n", arg2);
+ 		return 0;
+ 	}
+ 
+ 	return 0;
+ }
  
  static bool is_appuid(kuid_t uid)
  {
