@@ -5,39 +5,41 @@ Subject: [PATCH] ksu: add scope-minimized manual hooks for GKI2 android15-6.6
 
 References: backslashxx/KernelSU#5, KernelSU pr#1657, pr#2084
 ---
- drivers/input/input.c |  9 +++++++++
+ drivers/input/input.c | 10 ++++++++++
  fs/devpts/inode.c     |  9 +++++++++
  fs/exec.c             | 33 +++++++++++++++++++++++++++++++++
  fs/open.c             |  9 +++++++++
  fs/read_write.c       | 12 ++++++++++++
  fs/stat.c             | 13 +++++++++++++
- 6 files changed, 85 insertions(+)
+ 6 files changed, 86 insertions(+)
 
 diff --git a/drivers/input/input.c b/drivers/input/input.c
 index XXXXXXX..XXXXXXX 100644
 --- a/drivers/input/input.c
 +++ b/drivers/input/input.c
-@@ -388,11 +388,20 @@ static int input_get_disposition(struct input_dev *dev,
- 	*pval = value;
- 	return disposition;
+@@ -391,12 +391,22 @@
+ 	}
  }
-+
+ 
 +#ifdef CONFIG_KSU
 +extern bool ksu_input_hook __read_mostly;
 +extern int ksu_handle_input_handle_event(unsigned int *type, unsigned int *code, int *value);
 +#endif
- 
- static void input_handle_event(struct input_dev *dev,
- 			       unsigned int type, unsigned int code, int value)
++
+ void input_handle_event(struct input_dev *dev,
+ 			unsigned int type, unsigned int code, int value)
  {
- 	int disposition = input_get_disposition(dev, type, code, &value);
+ 	int disposition;
+ 
+ 	lockdep_assert_held(&dev->event_lock);
+ 
 +#ifdef CONFIG_KSU
 +	if (unlikely(ksu_input_hook))
 +		ksu_handle_input_handle_event(&type, &code, &value);
 +#endif
- 
- 	if (disposition != INPUT_IGNORE_EVENT && type != EV_SYN)
- 		add_input_randomness(type, code, value);
++
+ 	disposition = input_get_disposition(dev, type, code, &value);
+ 	if (disposition != INPUT_IGNORE_EVENT) {
 diff --git a/fs/devpts/inode.c b/fs/devpts/inode.c
 index XXXXXXX..XXXXXXX 100644
 --- a/fs/devpts/inode.c
