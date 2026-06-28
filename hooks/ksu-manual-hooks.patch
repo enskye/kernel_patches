@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000001 Mon Sep 17 00:00:00 2001
 From: KernelSU <ksu@kernelsu.org>
 Date: Mon, 01 Jan 2024 00:00:00 +0000
-Subject: [PATCH] ksu: add scope-minimized manual hooks for GKI2 android15-6.6
+Subject: [PATCH] ksu: add scope-minimized manual hooks for GKI2 android15-6.6 + susfs
 
 References: backslashxx/KernelSU#5, KernelSU pr#1657, pr#2084
 ---
@@ -9,8 +9,9 @@ References: backslashxx/KernelSU#5, KernelSU pr#1657, pr#2084
  fs/devpts/inode.c     |  9 +++++++++
  fs/exec.c             | 33 +++++++++++++++++++++++++++++++++
  fs/open.c             |  9 +++++++++
- fs/stat.c             | 13 +++++++++++++
- 5 files changed, 74 insertions(+)
+ fs/read_write.c       | 10 ++++++++++
+ fs/stat.c             | 10 ++++++++++
+ 6 files changed, 81 insertions(+)
 
 diff --git a/drivers/input/input.c b/drivers/input/input.c
 index XXXXXXX..XXXXXXX 100644
@@ -154,6 +155,33 @@ index XXXXXXX..XXXXXXX 100644
  	if (mode & ~S_IRWXO)	/* where's F_OK, X_OK, W_OK, R_OK? */
  		return -EINVAL;
  
+diff --git a/fs/read_write.c b/fs/read_write.c
+index XXXXXXX..XXXXXXX 100644
+--- a/fs/read_write.c
++++ b/fs/read_write.c
+@@ -568,6 +568,11 @@ static inline void file_pos_write(struct file *file, loff_t pos)
+ 		file->f_pos = pos;
+ }
+ 
++#ifdef CONFIG_KSU
++extern bool ksu_vfs_read_hook __read_mostly;
++extern __attribute__((cold)) void ksu_handle_sys_read(unsigned int fd);
++#endif
++
+ SYSCALL_DEFINE3(read, unsigned int, fd, char __user *, buf, size_t, count)
+ {
+ 	struct fd f = fdget_pos(fd);
+@@ -575,6 +580,11 @@ SYSCALL_DEFINE3(read, unsigned int, fd, char __user *, buf, size_t, count)
+ 
+ 	if (f.file) {
+ 		loff_t pos = file_pos_read(f.file);
++#ifdef CONFIG_KSU
++		if (unlikely(ksu_vfs_read_hook))
++			ksu_handle_sys_read(fd);
++#endif
+ 		ret = vfs_read(f.file, buf, count, &pos);
+ 		if (ret >= 0)
+ 			file_pos_write(f.file, pos);
 diff --git a/fs/stat.c b/fs/stat.c
 index XXXXXXX..XXXXXXX 100644
 --- a/fs/stat.c
@@ -163,7 +191,7 @@ index XXXXXXX..XXXXXXX 100644
  }
  
 +#ifdef CONFIG_KSU
-+extern int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags);
++extern int ksu_handle_stat(int *dfd, struct filename **filename_user, int *flags);
 +#endif
 +
  #if !defined(__ARCH_WANT_STAT64) || defined(__ARCH_WANT_SYS_NEWFSTATAT)
@@ -174,7 +202,7 @@ index XXXXXXX..XXXXXXX 100644
  	int error;
  
 +#ifdef CONFIG_KSU
-+	ksu_handle_stat(&dfd, &filename, &flag);
++	ksu_handle_stat(&dfd, (struct filename **)&filename, &flag);
 +#endif
  	error = vfs_fstatat(dfd, filename, &stat, flag);
  	if (error)
@@ -184,8 +212,9 @@ index XXXXXXX..XXXXXXX 100644
  	int error;
  
 +#ifdef CONFIG_KSU
-+	ksu_handle_stat(&dfd, &filename, &flag); /* 32-bit su support */
++	ksu_handle_stat(&dfd, (struct filename **)&filename, &flag);
 +#endif
  	error = vfs_fstatat(dfd, filename, &stat, flag);
  	if (error)
  		return error;
+   
