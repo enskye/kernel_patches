@@ -9,9 +9,8 @@ References: backslashxx/KernelSU#5, KernelSU pr#1657, pr#2084
  fs/devpts/inode.c     |  9 +++++++++
  fs/exec.c             | 33 +++++++++++++++++++++++++++++++++
  fs/open.c             |  9 +++++++++
- fs/read_write.c       | 12 ++++++++++++
  fs/stat.c             | 13 +++++++++++++
- 6 files changed, 86 insertions(+)
+ 5 files changed, 74 insertions(+)
 
 diff --git a/drivers/input/input.c b/drivers/input/input.c
 index XXXXXXX..XXXXXXX 100644
@@ -155,34 +154,6 @@ index XXXXXXX..XXXXXXX 100644
  	if (mode & ~S_IRWXO)	/* where's F_OK, X_OK, W_OK, R_OK? */
  		return -EINVAL;
  
-diff --git a/fs/read_write.c b/fs/read_write.c
-index XXXXXXX..XXXXXXX 100644
---- a/fs/read_write.c
-+++ b/fs/read_write.c
-@@ -568,6 +568,12 @@ static inline void file_pos_write(struct file *file, loff_t pos)
- 		file->f_pos = pos;
- }
- 
-+#ifdef CONFIG_KSU
-+extern bool ksu_vfs_read_hook __read_mostly;
-+extern int ksu_handle_sys_read(unsigned int fd, char __user **buf_ptr,
-+			size_t *count_ptr);
-+#endif
-+
- SYSCALL_DEFINE3(read, unsigned int, fd, char __user *, buf, size_t, count)
- {
- 	struct fd f = fdget_pos(fd);
-@@ -575,6 +581,10 @@ SYSCALL_DEFINE3(read, unsigned int, fd, char __user *, buf, size_t, count)
- 
- 	if (f.file) {
- 		loff_t pos = file_pos_read(f.file);
-+#ifdef CONFIG_KSU
-+		if (unlikely(ksu_vfs_read_hook))
-+			ksu_handle_sys_read(fd, &buf, &count);
-+#endif
- 		ret = vfs_read(f.file, buf, count, &pos);
- 		if (ret >= 0)
- 			file_pos_write(f.file, pos);
 diff --git a/fs/stat.c b/fs/stat.c
 index XXXXXXX..XXXXXXX 100644
 --- a/fs/stat.c
@@ -218,4 +189,3 @@ index XXXXXXX..XXXXXXX 100644
  	error = vfs_fstatat(dfd, filename, &stat, flag);
  	if (error)
  		return error;
-   
