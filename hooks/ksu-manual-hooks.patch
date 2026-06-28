@@ -4,12 +4,12 @@ Date: Mon, 01 Jan 2024 00:00:00 +0000
 Subject: [PATCH] ksu: add scope-minimized manual hooks for GKI2 android15-6.6
 
 Adds all KernelSU manual hooks without kprobes:
-  - drivers/input/input.c    : safemode key detection
-  - fs/devpts/inode.c        : PTY inode tracking
-  - fs/exec.c                : execveat + execve sucompat (64 & 32-bit)
-  - fs/open.c                : faccessat file access filter
-  - fs/read_write.c          : sys_read /proc filter
-  - fs/stat.c                : newfstatat + fstatat64 sucompat (64 & 32-bit)
+  - drivers/input/input.c : safemode key detection
+  - fs/devpts/inode.c     : PTY inode tracking
+  - fs/exec.c             : execveat + execve sucompat (64 & 32-bit)
+  - fs/open.c             : faccessat file access filter
+  - fs/read_write.c       : sys_read /proc filter
+  - fs/stat.c             : newfstatat + fstatat64 sucompat (64 & 32-bit)
 
 References: backslashxx/KernelSU#5, KernelSU pr#1657, pr#2084
 Signed-off-by: KernelSU <ksu@kernelsu.org>
@@ -26,16 +26,19 @@ diff --git a/drivers/input/input.c b/drivers/input/input.c
 index XXXXXXX..XXXXXXX 100644
 --- a/drivers/input/input.c
 +++ b/drivers/input/input.c
-@@ -377,10 +377,19 @@ static int input_get_disposition(struct input_dev *dev,
+@@ -388,6 +388,11 @@ static int input_get_disposition(struct input_dev *dev,
+ 	*pval = value;
  	return disposition;
  }
- 
++
 +#ifdef CONFIG_KSU
 +extern bool ksu_input_hook __read_mostly;
 +extern int ksu_handle_input_handle_event(unsigned int *type, unsigned int *code, int *value);
 +#endif
-+
+ 
  static void input_handle_event(struct input_dev *dev,
+ 			       unsigned int type, unsigned int code, int value)
+@@ -395,6 +400,11 @@ static void input_handle_event(struct input_dev *dev,
  			       unsigned int type, unsigned int code, int value)
  {
  	int disposition = input_get_disposition(dev, type, code, &value);
@@ -133,6 +136,7 @@ index XXXXXXX..XXXXXXX 100644
 +#endif
  	return compat_do_execve(getname(filename), argv, envp);
  }
+ 
 diff --git a/fs/open.c b/fs/open.c
 index XXXXXXX..XXXXXXX 100644
 --- a/fs/open.c
@@ -223,5 +227,3 @@ index XXXXXXX..XXXXXXX 100644
  	error = vfs_fstatat(dfd, filename, &stat, flag);
  	if (error)
  		return error;
--- 
-2.34.1
