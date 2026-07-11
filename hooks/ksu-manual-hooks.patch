@@ -1,21 +1,16 @@
-From 0000000000000000000000000000000000000001 Mon Sep 17 00:00:00 2001
-From: KernelSU <ksu@kernelsu.org>
-Date: Mon, 01 Jan 2024 00:00:00 +0000
-Subject: [PATCH] ksu: add scope-minimized manual hooks for GKI2 android15-6.6 + susfs
+From: backslashxx <118538522+backslashxx@users.noreply.github.com>
+Subject: ANDROID: KSU: scope-minimized manual hooks (android15-6.6-lts)
 
----
- drivers/input/input.c | 10 ++++++++++
- fs/devpts/inode.c     |  7 +++++++
- fs/exec.c             | 26 ++++++++++++++++++++++++++
- fs/open.c             |  9 +++++++++
- 4 files changed, 52 insertions(+)
+Backport of KernelSU pr#1657 with pr#2084 elements (32-bit sucompat),
+adapted for the android15-6.6-lts (Linux 6.6) GKI tree. Requires
+CONFIG_KSU=y and CONFIG_KSU_MANUAL_HOOK=y.
 
-diff --git a/drivers/input/input.c b/drivers/input/input.c
-index XXXXXXX..XXXXXXX 100644
+Reference: https://github.com/backslashxx/KernelSU/issues/5
+
 --- a/drivers/input/input.c
 +++ b/drivers/input/input.c
-@@ -391,12 +391,22 @@
- 	}
+@@ -377,10 +377,19 @@ static int input_get_disposition(struct input_dev *dev,
+ 	return disposition;
  }
  
 +#ifdef CONFIG_KSU
@@ -23,22 +18,17 @@ index XXXXXXX..XXXXXXX 100644
 +extern int ksu_handle_input_handle_event(unsigned int *type, unsigned int *code, int *value);
 +#endif
 +
- void input_handle_event(struct input_dev *dev,
- 			unsigned int type, unsigned int code, int value)
+ static void input_handle_event(struct input_dev *dev,
+ 			       unsigned int type, unsigned int code, int value)
  {
- 	int disposition;
- 
- 	lockdep_assert_held(&dev->event_lock);
- 
+ 	int disposition = input_get_disposition(dev, type, code, &value);
 +#ifdef CONFIG_KSU
 +	if (unlikely(ksu_input_hook))
 +		ksu_handle_input_handle_event(&type, &code, &value);
 +#endif
-+
- 	disposition = input_get_disposition(dev, type, code, &value);
- 	if (disposition != INPUT_IGNORE_EVENT) {
-diff --git a/fs/devpts/inode.c b/fs/devpts/inode.c
-index XXXXXXX..XXXXXXX 100644
+ 
+ 	if (disposition != INPUT_IGNORE_EVENT && type != EV_SYN)
+ 		add_input_randomness(type, code, value);
 --- a/fs/devpts/inode.c
 +++ b/fs/devpts/inode.c
 @@ -602,6 +602,10 @@ struct dentry *devpts_pty_new(struct pts_fs_info *fsi, int index, void *priv)
@@ -62,8 +52,6 @@ index XXXXXXX..XXXXXXX 100644
  	if (dentry->d_sb->s_magic != DEVPTS_SUPER_MAGIC)
  		return NULL;
  	return dentry->d_fsdata;
-diff --git a/fs/exec.c b/fs/exec.c
-index XXXXXXX..XXXXXXX 100644
 --- a/fs/exec.c
 +++ b/fs/exec.c
 @@ -1712,6 +1712,12 @@ static int exec_binprm(struct linux_binprm *bprm)
@@ -84,14 +72,14 @@ index XXXXXXX..XXXXXXX 100644
  	int retval;
  
 +#ifdef CONFIG_KSU
-+	if (unlikely(ksu_execveat_hook))
++	if (unlikely(ksu_execveat_hook)) 
 +		ksu_handle_execveat(&fd, &filename, &argv, &envp, &flags);
 +#endif
 +
  	if (IS_ERR(filename))
  		return PTR_ERR(filename);
  
-@@ -1968,10 +1979,21 @@ void set_dumpable(struct mm_struct *mm, int value)
+@@ -1968,11 +1979,22 @@ void set_dumpable(struct mm_struct *mm, int value)
  	} while (cmpxchg(&mm->flags, old, new) != old);
  }
  
@@ -124,8 +112,6 @@ index XXXXXXX..XXXXXXX 100644
 +#endif
  	return compat_do_execve(getname(filename), argv, envp);
  }
-diff --git a/fs/open.c b/fs/open.c
-index XXXXXXX..XXXXXXX 100644
 --- a/fs/open.c
 +++ b/fs/open.c
 @@ -354,6 +354,11 @@ SYSCALL_DEFINE4(fallocate, int, fd, int, mode, loff_t, offset, loff_t, len)
@@ -151,3 +137,62 @@ index XXXXXXX..XXXXXXX 100644
  	if (mode & ~S_IRWXO)	/* where's F_OK, X_OK, W_OK, R_OK? */
  		return -EINVAL;
  
+--- a/fs/read_write.c
++++ b/fs/read_write.c
+@@ -568,6 +568,12 @@ static inline void file_pos_write(struct file *file, loff_t pos)
+ 		file->f_pos = pos;
+ }
+ 
++#ifdef CONFIG_KSU
++extern bool ksu_vfs_read_hook __read_mostly;
++extern int ksu_handle_sys_read(unsigned int fd, char __user **buf_ptr,
++			size_t *count_ptr);
++#endif
++
+ SYSCALL_DEFINE3(read, unsigned int, fd, char __user *, buf, size_t, count)
+ {
+ 	struct fd f = fdget_pos(fd);
+@@ -575,6 +581,10 @@ SYSCALL_DEFINE3(read, unsigned int, fd, char __user *, buf, size_t, count)
+ 
+ 	if (f.file) {
+ 		loff_t pos = file_pos_read(f.file);
++#ifdef CONFIG_KSU
++		if (unlikely(ksu_vfs_read_hook)) 
++			ksu_handle_sys_read(fd, &buf, &count);
++#endif
+ 		ret = vfs_read(f.file, buf, count, &pos);
+ 		if (ret >= 0)
+ 			file_pos_write(f.file, pos);
+--- a/fs/stat.c
++++ b/fs/stat.c
+@@ -353,6 +353,10 @@ SYSCALL_DEFINE2(newlstat, const char __user *, filename,
+ 	return cp_new_stat(&stat, statbuf);
+ }
+ 
++#ifdef CONFIG_KSU
++extern int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags);
++#endif
++
+ #if !defined(__ARCH_WANT_STAT64) || defined(__ARCH_WANT_SYS_NEWFSTATAT)
+ SYSCALL_DEFINE4(newfstatat, int, dfd, const char __user *, filename,
+ 		struct stat __user *, statbuf, int, flag)
+@@ -360,6 +364,9 @@ SYSCALL_DEFINE4(newfstatat, int, dfd, const char __user *, filename,
+ 	struct kstat stat;
+ 	int error;
+ 
++#ifdef CONFIG_KSU
++	ksu_handle_stat(&dfd, &filename, &flag);
++#endif
+ 	error = vfs_fstatat(dfd, filename, &stat, flag);
+ 	if (error)
+ 		return error;
+@@ -504,6 +511,9 @@ SYSCALL_DEFINE4(fstatat64, int, dfd, const char __user *, filename,
+ 	struct kstat stat;
+ 	int error;
+ 
++#ifdef CONFIG_KSU
++	ksu_handle_stat(&dfd, &filename, &flag); /* 32-bit su support */
++#endif
+ 	error = vfs_fstatat(dfd, filename, &stat, flag);
+ 	if (error)
+ 		return error;
