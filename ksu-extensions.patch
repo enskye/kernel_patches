@@ -1,6 +1,6 @@
 --- a/kernel/supercall/supercall.h
 +++ b/kernel/supercall/supercall.h
-@@ -19,4 +19,13 @@
+@@ -19,4 +19,14 @@
  void ksu_supercalls_init(void);
  void ksu_supercalls_exit(void);
  
@@ -17,7 +17,7 @@
  #endif // __KSU_H_SUPERCALLS
 --- a/kernel/supercall/supercall.c
 +++ b/kernel/supercall/supercall.c
-@@ -81,9 +81,105 @@
+@@ -81,9 +81,123 @@
  		return ksu_handle_fd_request(arg4);
  	}
  
@@ -27,7 +27,7 @@
 +	if (current_uid().val != 0)
 +		return 0;
 +	
-+	// extensions
+ 	// extensions
 +	u64 reply = (u64)*arg;
 +
 +	if (magic2 == CHANGE_MANAGER_UID) {
@@ -143,7 +143,7 @@
  
  	return 0;
  }
-@@ -100,6 +196,8 @@
+@@ -100,6 +214,8 @@
  void __init ksu_supercalls_init(void)
  {
  	ksu_supercall_dump_commands();
