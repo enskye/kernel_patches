@@ -1,71 +1,10 @@
-From: backslashxx <118538522+backslashxx@users.noreply.github.com>
-Subject: ANDROID: KSU: scope-minimized manual hooks (android15-6.6-lts, verified against real source)
-
-Backport of KernelSU pr#1657 with pr#2084 elements (32-bit sucompat),
-re-derived directly against the actual android15-6.6-lts source for
-drivers/input/input.c, fs/devpts/inode.c, fs/exec.c, fs/read_write.c
-and fs/stat.c. Requires CONFIG_KSU=y and CONFIG_KSU_MANUAL_HOOK=y.
-
-Reference: https://github.com/backslashxx/KernelSU/issues/5
-
---- a/drivers/input/input.c
-+++ b/drivers/input/input.c
-@@ -391,6 +391,11 @@
- 	}
- }
- 
-+#ifdef CONFIG_KSU
-+extern bool ksu_input_hook __read_mostly;
-+extern int ksu_handle_input_handle_event(unsigned int *type, unsigned int *code, int *value);
-+#endif
-+
- void input_handle_event(struct input_dev *dev,
- 			unsigned int type, unsigned int code, int value)
- {
-@@ -399,6 +404,10 @@
- 	lockdep_assert_held(&dev->event_lock);
- 
- 	disposition = input_get_disposition(dev, type, code, &value);
-+#ifdef CONFIG_KSU
-+	if (unlikely(ksu_input_hook))
-+		ksu_handle_input_handle_event(&type, &code, &value);
-+#endif
- 	if (disposition != INPUT_IGNORE_EVENT) {
- 		if (type != EV_SYN)
- 			add_input_randomness(type, code, value);
-
---- a/fs/devpts/inode.c
-+++ b/fs/devpts/inode.c
-@@ -578,6 +578,10 @@
- 	return dentry;
- }
- 
-+#ifdef CONFIG_KSU
-+extern int ksu_handle_devpts(struct inode*);
-+#endif
-+
- /**
-  * devpts_get_priv -- get private data for a slave
-  * @dentry: dentry of the slave
-@@ -586,6 +590,9 @@
-  */
- void *devpts_get_priv(struct dentry *dentry)
- {
-+#ifdef CONFIG_KSU
-+	ksu_handle_devpts(dentry->d_inode);
-+#endif
- 	if (dentry->d_sb->s_magic != DEVPTS_SUPER_MAGIC)
- 		return NULL;
- 	return dentry->d_fsdata;
-
 --- a/fs/exec.c
 +++ b/fs/exec.c
-@@ -1926,6 +1926,12 @@
+@@ -1926,6 +1926,11 @@
  	return retval;
  }
  
 +#ifdef CONFIG_KSU
-+extern bool ksu_execveat_hook __read_mostly;
 +extern int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv,
 +			void *envp, int *flags);
 +#endif
@@ -73,27 +12,23 @@ Reference: https://github.com/backslashxx/KernelSU/issues/5
  static int do_execveat_common(int fd, struct filename *filename,
  			      struct user_arg_ptr argv,
  			      struct user_arg_ptr envp,
-@@ -1934,6 +1940,11 @@
+@@ -1934,6 +1939,10 @@
  	struct linux_binprm *bprm;
  	int retval;
  
 +#ifdef CONFIG_KSU
-+	if (unlikely(ksu_execveat_hook))
-+		ksu_handle_execveat(&fd, &filename, &argv, &envp, &flags);
++	ksu_handle_execveat(&fd, &filename, &argv, &envp, &flags);
 +#endif
 +
  	if (IS_ERR(filename))
  		return PTR_ERR(filename);
  
-@@ -2147,11 +2158,22 @@
+@@ -2147,11 +2156,19 @@
  	set_mask_bits(&mm->flags, MMF_DUMPABLE_MASK, value);
  }
  
 +#ifdef CONFIG_KSU
-+extern int ksu_handle_execve_sucompat(int *fd, const char __user **filename_user,
-+			       void *__never_use_argv, void *__never_use_envp,
-+			       int *__never_use_flags);
-+int at_fdcwd = AT_FDCWD;
++extern int ksu_handle_execve(const char __user **filename_user, void *argv, void *envp);
 +#endif
 +
  SYSCALL_DEFINE3(execve,
@@ -102,50 +37,21 @@ Reference: https://github.com/backslashxx/KernelSU/issues/5
  		const char __user *const __user *, envp)
  {
 +#ifdef CONFIG_KSU
-+	if (!ksu_execveat_hook)
-+		ksu_handle_execve_sucompat(&at_fdcwd, &filename, NULL, NULL, NULL);
++	ksu_handle_execve(&filename, NULL, NULL);
 +#endif
  	return do_execve(getname(filename), argv, envp);
  }
  
-@@ -2171,6 +2193,10 @@
+@@ -2171,6 +2188,9 @@
  	const compat_uptr_t __user *, argv,
  	const compat_uptr_t __user *, envp)
  {
 +#ifdef CONFIG_KSU
-+	if (!ksu_execveat_hook)
-+		ksu_handle_execve_sucompat(&at_fdcwd, &filename, NULL, NULL, NULL); /* 32-bit su support */
++	ksu_handle_execve(&filename, NULL, NULL);
 +#endif
  	return compat_do_execve(getname(filename), argv, envp);
  }
  
-
---- a/fs/read_write.c
-+++ b/fs/read_write.c
-@@ -600,11 +600,22 @@
- 	return file->f_mode & FMODE_STREAM ? NULL : &file->f_pos;
- }
- 
-+#ifdef CONFIG_KSU
-+extern bool ksu_vfs_read_hook __read_mostly;
-+extern int ksu_handle_sys_read(unsigned int fd, char __user **buf_ptr,
-+			size_t *count_ptr);
-+#endif
-+
- ssize_t ksys_read(unsigned int fd, char __user *buf, size_t count)
- {
- 	struct fd f = fdget_pos(fd);
- 	ssize_t ret = -EBADF;
- 
-+#ifdef CONFIG_KSU
-+	if (unlikely(ksu_vfs_read_hook))
-+		ksu_handle_sys_read(fd, &buf, &count);
-+#endif
-+
- 	if (f.file) {
- 		loff_t pos, *ppos = file_ppos(f.file);
- 		if (ppos) {
-
 --- a/fs/stat.c
 +++ b/fs/stat.c
 @@ -453,6 +453,10 @@
@@ -174,12 +80,11 @@ Reference: https://github.com/backslashxx/KernelSU/issues/5
  	int error;
  
 +#ifdef CONFIG_KSU
-+	ksu_handle_stat(&dfd, &filename, &flag); /* 32-bit su support */
++	ksu_handle_stat(&dfd, &filename, &flag);
 +#endif
  	error = vfs_fstatat(dfd, filename, &stat, flag);
  	if (error)
  		return error;
-
 --- a/fs/open.c
 +++ b/fs/open.c
 @@ -455,6 +455,11 @@
