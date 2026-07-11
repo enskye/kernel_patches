@@ -23,7 +23,7 @@
  	if (IS_ERR(filename))
  		return PTR_ERR(filename);
  
-@@ -2147,11 +2156,19 @@
+@@ -2147,11 +2156,18 @@
  	set_mask_bits(&mm->flags, MMF_DUMPABLE_MASK, value);
  }
  
@@ -42,7 +42,7 @@
  	return do_execve(getname(filename), argv, envp);
  }
  
-@@ -2171,6 +2188,9 @@
+@@ -2171,6 +2187,9 @@
  	const compat_uptr_t __user *, argv,
  	const compat_uptr_t __user *, envp)
  {
